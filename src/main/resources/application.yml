@@ -1,7 +1,10 @@
+# 服务端口、路径配置
 server:
   port: 8123
   servlet:
     context-path: /api
+
+# spring 相关配置
 spring:
   application:
     name: yu-picture-backend
@@ -12,4 +15,26 @@ spring:
     username: root
     password: root
 
+# mybatis-plus 相关配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    # 仅在开发环境开启日志
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名
+      logic-delete-value: 1 # 逻辑已删除值（默认为 1）
+      logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
 
+# knife4j 接口文档配置，访问类似地址 http://localhost:8123/api/doc.html
+knife4j:
+  enable: true
+  openapi:
+    title: "接口文档"
+    version: 1.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.sonnet.picturebackend.controller # 改动配置
