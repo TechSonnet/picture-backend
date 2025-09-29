@@ -166,6 +166,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      * @return 脱敏信息
      */
     private UserVO getUserVO(User user) {
+        if (user == null){
+            return null;
+        }
         UserVO loginUserVO = new UserVO();
         BeanUtils.copyProperties(user, loginUserVO);
         return loginUserVO;

@@ -4,7 +4,7 @@ import com.sonnet.picturebackend.common.BaseResponse;
 import com.sonnet.picturebackend.common.ResultUtils;
 import com.sonnet.picturebackend.exception.ErrorCode;
 import com.sonnet.picturebackend.exception.ThrowUtils;
-import com.sonnet.picturebackend.model.dto.UserAddRequest;
+import com.sonnet.picturebackend.model.dto.UserRegisterRequest;
 import com.sonnet.picturebackend.model.dto.UserLoginRequest;
 import com.sonnet.picturebackend.model.vo.UserVO;
 import com.sonnet.picturebackend.service.UserService;
@@ -21,14 +21,14 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public BaseResponse<Long> register(@RequestBody UserAddRequest userAddRequest) {
+    public BaseResponse<Long> register(@RequestBody UserRegisterRequest userRegisterRequest) {
 
         // 1. 基本校验
-        ThrowUtils.throwIf(userAddRequest == null, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR);
 
-        String userAccount = userAddRequest.getUserAccount();
-        String password = userAddRequest.getPassword();
-        String checkPassword = userAddRequest.getCheckPassword();
+        String userAccount = userRegisterRequest.getUserAccount();
+        String password = userRegisterRequest.getPassword();
+        String checkPassword = userRegisterRequest.getCheckPassword();
 
         // 2. 创建用户
         long restlt = userService.userRegister(userAccount, password, checkPassword);
