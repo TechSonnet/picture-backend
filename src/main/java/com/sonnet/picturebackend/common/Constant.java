@@ -1,14 +1,26 @@
 package com.sonnet.picturebackend.common;
 
-public class Constant {
+public interface Constant {
     /**
      * 密码盐
      */
-    public static final String SALT = "sonnet";
+    String SALT = "sonnet";
 
 
     /**
      * 用户登录态键
      */
-    public static final String USER_LOGIN_STATE = "user_login_state";
+    String USER_LOGIN_STATE = "user_login_state";
+
+    /**
+     * 默认角色
+     */
+    String DEFAULT_ROLE = "user";
+
+    /**
+     * 管理员角色
+     */
+    String ADMIN_ROLE = "admin";
 }
+
+

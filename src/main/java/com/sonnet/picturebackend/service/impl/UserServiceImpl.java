@@ -5,12 +5,15 @@ import cn.hutool.Hutool;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.crypto.digest.DigestAlgorithm;
 import cn.hutool.crypto.digest.DigestUtil;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.sonnet.picturebackend.common.Constant;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
 import com.sonnet.picturebackend.exception.ThrowUtils;
+import com.sonnet.picturebackend.model.dto.UserQueryRequest;
 import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.mapper.UserMapper;
 import com.sonnet.picturebackend.model.enums.UserRoleEnum;
@@ -21,7 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
 * @author Administrator
@@ -165,7 +170,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      * @param user
      * @return 脱敏信息
      */
-    private UserVO getUserVO(User user) {
+    public UserVO getUserVO(User user) {
         if (user == null){
             return null;
         }
@@ -175,12 +180,51 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     /**
+     * 获取用户列表脱敏信息
+     * @param userList
+     * @return 脱敏信息列表
+     */
+    public List<UserVO> getUserVOList(List<User> userList) {
+        // 1. 基本校验
+        if(userList == null){
+            return null;
+        }
+
+        // 2. 转换并返回结果
+        return userList.stream().map(this::getUserVO).collect(Collectors.toList());
+    }
+
+    /**
      * 获取加密密码
      * @param password
      * @return 加密后的密码
      */
-    private String getEncryptPassword(String password) {
+    public String getEncryptPassword(String password) {
         return DigestUtil.sha256Hex(Constant.SALT +  password);
+    }
+
+    @Override
+    public Wrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest) {
+        if (userQueryRequest == null){
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "params is null");
+        }
+
+        Long id = userQueryRequest.getId();
+        String userAccount = userQueryRequest.getUserAccount();
+        String userName = userQueryRequest.getUserName();
+        String userProfile = userQueryRequest.getUserProfile();
+        String userRole = userQueryRequest.getUserRole();
+        String sortField = userQueryRequest.getSortField();
+        String sortOrder = userQueryRequest.getSortOrder();
+
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq(id != null && id > 0, "id", id);
+        queryWrapper.eq(StringUtils.isNotBlank(userAccount), "userAccount", userAccount);
+        queryWrapper.eq(StringUtils.isNotBlank(userName), "userName", userName);
+        queryWrapper.eq(StringUtils.isNotBlank(userProfile), "userProfile", userProfile);
+        queryWrapper.eq(StringUtils.isNotBlank(userRole), "userRole", userRole);
+        queryWrapper.orderBy(StringUtils.isNotBlank(sortField),sortOrder.equals("ascend"), sortField);
+        return queryWrapper;
     }
 }
 

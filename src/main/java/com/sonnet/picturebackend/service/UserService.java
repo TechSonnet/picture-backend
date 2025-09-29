@@ -1,10 +1,13 @@
 package com.sonnet.picturebackend.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.sonnet.picturebackend.model.dto.UserQueryRequest;
 import com.sonnet.picturebackend.model.entry.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.sonnet.picturebackend.model.vo.UserVO;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
 * @author Administrator
@@ -20,4 +23,12 @@ public interface UserService extends IService<User> {
     UserVO getLoginUserVO(HttpServletRequest request);
 
     boolean logout(HttpServletRequest request);
+
+    UserVO getUserVO(User user);
+
+    List<UserVO> getUserVOList(List<User> userList);
+
+    String getEncryptPassword(String password);
+
+    Wrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
 }
