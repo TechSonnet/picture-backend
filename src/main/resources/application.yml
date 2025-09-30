@@ -14,6 +14,9 @@ spring:
     url: jdbc:mysql://115.159.149.217:3306/picture_backend
     username: root
     password: root314
+  # 激活的配置文件
+  profiles:
+      active: local
 
 # mybatis-plus 相关配置
 mybatis-plus:

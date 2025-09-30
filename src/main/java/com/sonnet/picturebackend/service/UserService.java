@@ -31,4 +31,6 @@ public interface UserService extends IService<User> {
     String getEncryptPassword(String password);
 
     Wrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
+
+    User getLoginUser(HttpServletRequest request);
 }

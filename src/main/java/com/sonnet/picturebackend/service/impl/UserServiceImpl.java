@@ -226,6 +226,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         queryWrapper.orderBy(StringUtils.isNotBlank(sortField),sortOrder.equals("ascend"), sortField);
         return queryWrapper;
     }
+
+
+    /**
+     * 获取登录用户
+     * @param request
+     * @return
+     */
+    @Override
+    public User getLoginUser(HttpServletRequest request) {
+
+        if (request.getSession().getAttribute(Constant.USER_LOGIN_STATE) == null){
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+        return (User) request.getSession().getAttribute(Constant.USER_LOGIN_STATE);
+    }
 }
 
 
