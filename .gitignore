@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 /logs/
+
+### config file ###
+application-local.yml
