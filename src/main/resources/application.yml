@@ -11,9 +11,9 @@ spring:
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/picture_backend
+    url: jdbc:mysql://115.159.149.217:3306/picture_backend
     username: root
-    password: root
+    password: root314
 
 # mybatis-plus 相关配置
 mybatis-plus:

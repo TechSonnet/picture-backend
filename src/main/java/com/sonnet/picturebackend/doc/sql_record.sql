@@ -1,4 +1,4 @@
--- 创建用户表
+-- 用户表
 create table if not exists user
 (
     id           bigint auto_increment comment 'id' primary key,
