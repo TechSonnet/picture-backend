@@ -1,5 +1,6 @@
 package com.sonnet.picturebackend.model.vo;
 
+
 import cn.hutool.json.JSONUtil;
 import com.sonnet.picturebackend.model.entry.Picture;
 import lombok.Data;
@@ -8,6 +9,13 @@ import org.springframework.beans.BeanUtils;
 import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
+
+/**
+ * 此类中的两个方法，是否可以直接写在 Picture 类中
+ * 可以，但是不推荐，违反了职责单一原则
+ * Picture 作为数据库实体，仅负责持久化状态与 ORM 映射
+ * 一旦加上 VO 转换逻辑，就承担了展示层逻辑，职责混杂
+ */
 
 @Data
 public class PictureVO implements Serializable {

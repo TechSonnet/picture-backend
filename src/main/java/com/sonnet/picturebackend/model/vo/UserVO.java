@@ -1,7 +1,9 @@
 package com.sonnet.picturebackend.model.vo;
 
 import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.sonnet.picturebackend.model.entry.User;
 import lombok.Data;
+import org.springframework.beans.BeanUtils;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -65,4 +67,20 @@ public class UserVO implements Serializable {
 
 
     private static final long serialVersionUID = 1L;
+
+
+    /**
+     * 对象转包装类
+     *
+     * @param user
+     * @return
+     */
+    public static UserVO objToVo(User user) {
+        if (user == null) {
+            return null;
+        }
+        UserVO userVO = new UserVO();
+        BeanUtils.copyProperties(user, userVO);
+        return userVO;
+    }
 }
