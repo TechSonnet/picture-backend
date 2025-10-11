@@ -3,26 +3,29 @@ package com.sonnet.picturebackend.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.sonnet.picturebackend.common.ResultUtils;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
 import com.sonnet.picturebackend.manager.FileManager;
 import com.sonnet.picturebackend.mapper.PictureMapper;
-import com.sonnet.picturebackend.model.dto.PictureQueryRequest;
-import com.sonnet.picturebackend.model.dto.PictureUploadRequest;
+import com.sonnet.picturebackend.model.dto.picture.*;
+import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
 import com.sonnet.picturebackend.model.vo.PictureVO;
-import com.sonnet.picturebackend.model.dto.UploadPictureResult;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.model.vo.UserVO;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +58,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Override
     public PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
-        // 1. 详细校验
+        // 1. 详细参数校验
         if (multipartFile == null){
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "params is null");
         }
@@ -63,7 +66,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "user is not login");
         }
 
-        // 2. 判断是新增图片还是更新图片， 更新需判断图片是否存在
+
+        // 3. 判断是新增图片还是更新图片
         Long pictureId = null;
         if (pictureUploadRequest.getId() != null){
             pictureId = pictureUploadRequest.getId();
@@ -76,12 +80,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "picture is not exists");
             }
         }
-        // 3. 上传图片，获取上传后的信息
+
+        // 4. 上传图片，获取上传后的信息
         // a. 构造存储路径并上云
         String uploadPathPrefix = String.format("public/%s", loginUser.getId()); // 图片均存放在 public 目录下，且每个用户一个子目录目录
         UploadPictureResult uploadPictureResult = fileManager.uploadPicture(multipartFile, uploadPathPrefix);
         // b. 构造存入数据库的信息并存入
         Picture picture = new Picture();
+        fillReviewParams(picture, loginUser); // 填写审核参数
         picture.setUrl(uploadPictureResult.getUrl());
         picture.setName(uploadPictureResult.getPicName());
         picture.setPicSize(uploadPictureResult.getPicSize());
@@ -91,8 +97,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setPicFormat(uploadPictureResult.getPicFormat());
         picture.setUserId(loginUser.getId());
 
-        // 4. 如果为更新操作，更新编辑时间
+        // 5. 如果为更新操作，更新编辑时间
         if (pictureId != null){
+            // a. 仅本人和管理员可以编辑
+            if (!userService.isAdmin(loginUser) && !picture.getUserId().equals(loginUser.getId())){
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to edit picture");
+            }
             picture.setId(pictureId);
             picture.setEditTime(new Date());
         }
@@ -101,8 +111,89 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "save or update picture failed");
         }
 
-        // 5. 返回结果
+        // 6. 返回结果
         return PictureVO.objToVo(picture);
+    }
+
+
+    /**
+     * 填充审核信息
+     * @param picture
+     * @param loginUser
+     */
+    public void fillReviewParams(Picture picture, User loginUser) {
+        // 管理员，自动填入审核信息
+        if (userService.isAdmin(loginUser)){
+            picture.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+            picture.setReviewerId(loginUser.getId());
+            picture.setReviewTime(new Date());
+        }
+
+        // 用户，置为待审核状态
+        if (!userService.isAdmin(loginUser)){
+            picture.setReviewStatus(PictureReviewStatusEnum.REVIEWING.getValue());
+        }
+    }
+
+    @Override
+    public boolean editPicture(PictureEditRequest pictureEditRequest, HttpServletRequest request) {
+        // 1. 详细参数校验
+        if (pictureEditRequest == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+
+        // 2. vo ->  entity
+        Picture picture = new Picture();
+        fillReviewParams(picture, userService.getLoginUser(request));
+        BeanUtils.copyProperties(pictureEditRequest, picture);
+        // 将 list 转换成 json，这个与具体类的设计有关
+        // 不过，此处将 vo 中的 tags 设置为列表，这个经验可以学习
+        picture.setTags(JSONUtil.toJsonStr(pictureEditRequest.getTags()));
+        picture.setEditTime(new Date());
+
+        // 3. 编辑并更新
+        // a. 权限校验
+        User loginUser = userService.getLoginUser(request);
+        if (loginUser == null){
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+        Picture oldPicture = this.getById(picture.getId());
+        if (oldPicture == null){
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        }
+        // b. 仅本人和管理员可更新
+        if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)){
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        // c. 执行更新操作
+        boolean result = this.updateById(picture);
+        if (!result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新失败");
+        }
+
+        // 4. 返回结果
+        return result;
+    }
+
+    @Override
+    public boolean updatePicture(PictureUpdateRequest pictureUpdateRequest, HttpServletRequest request) {
+
+        // 详细参数校验
+        if (pictureUpdateRequest == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "params is null");
+        }
+
+        // 数据转换
+        // a. DTO 转换为实体类
+        // b. DTO 的 list 转换为 String
+
+
+        // 权限校验
+
+
+        // 操作数据库
+
+        return false;
     }
 
     /**
@@ -208,6 +299,67 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // 3. 返回结果
         return pictureVOPage;
+    }
+
+    /**
+     * 图片审核
+     * @param pictureReviewRequest
+     * @param loginUser
+     * @return
+     */
+    @Override
+    public boolean doReviewPicture(PictureReviewRequest pictureReviewRequest, User loginUser) {
+        // 1. 参数校验
+        Long id = pictureReviewRequest.getId();
+        Integer reviewStatus = pictureReviewRequest.getReviewStatus();
+        PictureReviewStatusEnum anEnum = PictureReviewStatusEnum.getEnumByValue(reviewStatus);
+        if (id == null || anEnum == null ){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+
+        // 2. 校验图片是否存在
+        Picture picture = this.getById(pictureReviewRequest.getId());
+        if (picture == null){
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        }
+        if (picture.getReviewStatus().equals(pictureReviewRequest.getReviewStatus())){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "重复操作");
+        }
+
+        // 3. 修改图片状态
+        // 4. 封装返回结果
+        Picture updatePicture = new Picture();
+        BeanUtils.copyProperties(pictureReviewRequest, updatePicture);
+        updatePicture.setReviewerId(loginUser.getId());
+        updatePicture.setReviewTime(new Date());
+        return this.updateById(updatePicture);
+
+    }
+
+
+    /**
+     * 校验图片
+     * @param multipartFile
+     */
+    @Override
+    public void validatePicture(MultipartFile multipartFile) {
+        if (multipartFile == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "上传图片不能为空");
+        }
+        // a. 检验文件大小
+        long size = multipartFile.getSize();
+        if (size > 1024 * 1024 * 5){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "上传图片不能大于5M");
+        }
+        // b. 校验文件后缀
+        String filename = multipartFile.getOriginalFilename();
+        if (filename == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件名不能为空");
+        }
+        String suffix = filename.substring(filename.lastIndexOf("."));
+        if (!".png".equals(suffix) && !".jpg".equals(suffix) && !".jpeg".equals(suffix)){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "上传图片格式错误");
+        }
     }
 
 }

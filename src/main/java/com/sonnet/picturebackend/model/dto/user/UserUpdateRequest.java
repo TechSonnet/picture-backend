@@ -1,8 +1,5 @@
-package com.sonnet.picturebackend.model.dto;
+package com.sonnet.picturebackend.model.dto.user;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import lombok.Data;
 
 import java.io.Serializable;

@@ -1,7 +1,7 @@
 package com.sonnet.picturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.sonnet.picturebackend.model.dto.UserQueryRequest;
+import com.sonnet.picturebackend.model.dto.user.UserQueryRequest;
 import com.sonnet.picturebackend.model.entry.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.sonnet.picturebackend.model.vo.UserVO;
@@ -33,4 +33,6 @@ public interface UserService extends IService<User> {
     Wrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
 
     User getLoginUser(HttpServletRequest request);
+
+    boolean isAdmin(User loginUser);
 }

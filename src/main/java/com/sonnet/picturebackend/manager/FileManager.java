@@ -11,7 +11,7 @@ import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
 import com.sonnet.picturebackend.config.CosClientConfig;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
-import com.sonnet.picturebackend.model.dto.UploadPictureResult;
+import com.sonnet.picturebackend.model.dto.picture.UploadPictureResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,7 +20,6 @@ import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Date;
 
 /**
  * FileManager <- CosManager，注意这个调用链

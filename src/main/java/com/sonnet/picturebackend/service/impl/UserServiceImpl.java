@@ -1,9 +1,5 @@
 package com.sonnet.picturebackend.service.impl;
 
-import ch.qos.logback.classic.spi.EventArgUtil;
-import cn.hutool.Hutool;
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.crypto.digest.DigestAlgorithm;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -12,8 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.sonnet.picturebackend.common.Constant;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
-import com.sonnet.picturebackend.exception.ThrowUtils;
-import com.sonnet.picturebackend.model.dto.UserQueryRequest;
+import com.sonnet.picturebackend.model.dto.user.UserQueryRequest;
 import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.mapper.UserMapper;
 import com.sonnet.picturebackend.model.enums.UserRoleEnum;
@@ -21,7 +16,6 @@ import com.sonnet.picturebackend.model.vo.UserVO;
 import com.sonnet.picturebackend.service.UserService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -240,6 +234,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
         return (User) request.getSession().getAttribute(Constant.USER_LOGIN_STATE);
+    }
+
+    /**
+     * 判断是否为管理员
+     * @param loginUser
+     * @return
+     */
+    @Override
+    public boolean isAdmin(User loginUser) {
+        return loginUser != null && UserRoleEnum.ADMIN.getValue().equals(loginUser.getUserRole());
     }
 }
 

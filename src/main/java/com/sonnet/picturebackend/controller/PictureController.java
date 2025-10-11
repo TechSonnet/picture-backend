@@ -5,21 +5,26 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sonnet.picturebackend.annotation.AuthCheck;
 import com.sonnet.picturebackend.common.BaseResponse;
 import com.sonnet.picturebackend.common.Constant;
+import com.sonnet.picturebackend.common.DeleteRequest;
 import com.sonnet.picturebackend.common.ResultUtils;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
-import com.sonnet.picturebackend.model.dto.PictureQueryRequest;
-import com.sonnet.picturebackend.model.dto.PictureUploadRequest;
+import com.sonnet.picturebackend.model.dto.picture.*;
+import com.sonnet.picturebackend.model.entry.PictureTagCategory;
 import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 
 @RestController
 @RequestMapping("/v1/pic")
@@ -34,7 +39,6 @@ public class PictureController {
 
 
     @PostMapping("/upload")
-    @AuthCheck(mustRole = Constant.ADMIN_ROLE)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile,
                                                  PictureUploadRequest pictureUploadRequest,
                                                  HttpServletRequest request) {
@@ -147,39 +151,113 @@ public class PictureController {
         return ResultUtils.success(pictureService.getPictureVOList(picturePage));
     }
 
-//    @PostMapping("/deit")
-//    public BaseResponse<Boolean> editPicture(@RequestBody PictureEditRequest pictureEditRequest,
-//                                             HttpServletRequest request){
-//
-//        // 1. 基本校验
-//        if (pictureEditRequest == null){
-//            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
-//        }
-//
-//        // 2. vo ->  entity
-//        Picture picture = PictureVO.voToObj(pictureEditRequest);
-//        // 将 list 转换成 json，这个与具体类的设计有过
-//        // 不过，此处将 vo 中的 tags 设置为列表，这个经验可以学习
-//        picture.setTags(JSONUtil.toJsonStr(pictureEditRequest.getTags()));
-//
-//        // 3. 编辑并更新
-//        // a. 权限校验
-//        User loginUser = userService.getLoginUser(request);
-//        if (loginUser == null){
-//            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
-//        }
-//        Picture oldPicture = pictureService.getById(picture.getId());
-//        if (oldPicture == null){
-//            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
-//        }
-//        // b. 仅本人和管理员可更新
-//        if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)){
-//            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-//        }
-//        // c. 执行更新操作
-//
-//
-//        // 4. 返回结果
-//    }
+
+    /**
+     * 更新图片信息，供管理员使用
+     * @param pictureUpdateRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/update")
+    @AuthCheck(mustRole = Constant.ADMIN_ROLE)
+    private BaseResponse<Boolean> updatePicture(@RequestBody PictureUpdateRequest pictureUpdateRequest,
+                                                HttpServletRequest request){
+        // 基本参数校验
+        if (pictureUpdateRequest == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+
+        // 调用服务更新图片
+        boolean result = pictureService.updatePicture(pictureUpdateRequest, request);
+
+        // 返回结果
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 编辑图片，提供给普通用户使用
+     * @param pictureEditRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/edit")
+    public BaseResponse<Boolean> editPicture(@RequestBody PictureEditRequest pictureEditRequest,
+                                             HttpServletRequest request){
+
+        // 1. 基本校验
+        if (pictureEditRequest == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+
+        // 2. 编辑图片
+        boolean result = pictureService.editPicture(pictureEditRequest, request);
+
+        // 4. 返回结果
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 删除图片
+     * @param deleteRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/delete")
+    public BaseResponse<Boolean> deletePicture(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
+        // 1. 基本参数校验
+        if (deleteRequest == null || deleteRequest.getId() <= 0){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+
+        // 2. 权限校验，仅用户和管理员可删除
+        User loginUser = userService.getLoginUser(request);
+        Picture picture = pictureService.getById(deleteRequest.getId());
+        if (picture == null){
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        }
+        if (!picture.getUserId().equals(loginUser.getId())
+                && !userService.isAdmin(loginUser)){
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限删除");
+        }
+
+        // 3. 删除图片
+        boolean result = pictureService.removeById(deleteRequest.getId());
+
+        // 4. 返回结果
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 获取图片标签和分类
+     * @return
+     */
+    @GetMapping("/tag_category")
+    public BaseResponse<PictureTagCategory> listPictureTagCategory() {
+        PictureTagCategory pictureTagCategory = new PictureTagCategory();
+        List<String> tagList = Arrays.asList("热门", "搞笑", "生活", "高清", "艺术", "校园", "背景", "简历", "创意");
+        List<String> categoryList = Arrays.asList("模板", "电商", "表情包", "素材", "海报");
+        pictureTagCategory.setTagList(tagList);
+        pictureTagCategory.setCategoryList(categoryList);
+        return ResultUtils.success(pictureTagCategory);
+    }
+
+    @PostMapping("/review")
+    @AuthCheck(mustRole = Constant.ADMIN_ROLE)
+    public BaseResponse<Boolean> reviewPicture(@RequestBody PictureReviewRequest pictureReviewRequest,
+                                               HttpServletRequest request) {
+        // 1. 基本参数校验
+        if (pictureReviewRequest == null || pictureReviewRequest.getId() <= 0){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+
+        // 2. 权限校验
+
+        // 3. 进行审核
+        User loginUser = userService.getLoginUser(request);
+        boolean result = pictureService.doReviewPicture(pictureReviewRequest, loginUser);
+
+        // 4. 返回结果
+        return ResultUtils.success(result);
+    }
 
 }

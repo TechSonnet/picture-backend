@@ -1,4 +1,4 @@
-package com.sonnet.picturebackend.model.dto;
+package com.sonnet.picturebackend.model.dto.user;
 
 import lombok.Data;
 
