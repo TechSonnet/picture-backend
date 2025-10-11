@@ -21,11 +21,16 @@
             <result property="editTime" column="editTime" />
             <result property="updateTime" column="updateTime" />
             <result property="isDelete" column="isDelete" />
+            <result property="reviewStatus" column="reviewStatus" />
+            <result property="reviewMessage" column="reviewMessage" />
+            <result property="reviewerId" column="reviewerId" />
+            <result property="reviewTime" column="reviewTime" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,url,name,introduction,category,tags,
-        pic_size,pic_width,pic_height,pic_format,user_id,
-        create_time,last_edit_time,update_time,is_delete
+        picSize,picWidth,picHeight,picFormat,userId,
+        createTime,editTime,updateTime,isDelete,picScale,
+        reviewStatus,reviewMessage,reviewerId,reviewTime
     </sql>
 </mapper>

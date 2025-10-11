@@ -7,6 +7,8 @@ import java.io.Serializable;
 @Data
 public class PictureReviewRequest implements Serializable {
 
+    // reviewId 和 reviewTime 由系统自动填入
+
     /**
      * id
      */

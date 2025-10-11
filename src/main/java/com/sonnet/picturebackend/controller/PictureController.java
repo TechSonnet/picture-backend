@@ -1,6 +1,5 @@
 package com.sonnet.picturebackend.controller;
 
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sonnet.picturebackend.annotation.AuthCheck;
 import com.sonnet.picturebackend.common.BaseResponse;
@@ -16,14 +15,12 @@ import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
-import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 
 @RestController
@@ -243,20 +240,20 @@ public class PictureController {
 
     @PostMapping("/review")
     @AuthCheck(mustRole = Constant.ADMIN_ROLE)
-    public BaseResponse<Boolean> reviewPicture(@RequestBody PictureReviewRequest pictureReviewRequest,
-                                               HttpServletRequest request) {
-        // 1. 基本参数校验
+    public BaseResponse<Boolean> doPictureReview(@RequestBody PictureReviewRequest pictureReviewRequest,
+                                                 HttpServletRequest request) {
+        // 基本参数校验
         if (pictureReviewRequest == null || pictureReviewRequest.getId() <= 0){
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
         }
 
-        // 2. 权限校验
-
-        // 3. 进行审核
+        // 获取当前用户
         User loginUser = userService.getLoginUser(request);
-        boolean result = pictureService.doReviewPicture(pictureReviewRequest, loginUser);
 
-        // 4. 返回结果
+        // 调用审核服务进行审核
+        boolean result = pictureService.doPictureReview(pictureReviewRequest, loginUser);
+
+        // 返回结果
         return ResultUtils.success(result);
     }
 

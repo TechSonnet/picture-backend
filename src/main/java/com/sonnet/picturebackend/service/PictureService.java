@@ -33,5 +33,7 @@ public interface PictureService extends IService<Picture> {
 
     boolean updatePicture(PictureUpdateRequest pictureUpdateRequest, HttpServletRequest request);
 
-    void validatePicture(MultipartFile multipartFile);
+    void validatePicture(Picture picture);
+
+    boolean doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
 }
