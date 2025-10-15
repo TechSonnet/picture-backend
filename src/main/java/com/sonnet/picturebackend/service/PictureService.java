@@ -7,6 +7,7 @@ import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -36,4 +37,7 @@ public interface PictureService extends IService<Picture> {
     void validatePicture(Picture picture);
 
     boolean doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
+
+
+    PictureVO uploadPictureByUrl(PictureUploadRequest pictureUploadRequest, User currentUser);
 }

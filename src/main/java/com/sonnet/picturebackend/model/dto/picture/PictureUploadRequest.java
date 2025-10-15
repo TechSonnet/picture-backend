@@ -7,10 +7,16 @@ import java.io.Serializable;
 @Data
 public class PictureUploadRequest implements Serializable {
 
-    private static final long serialVersionUID = 1L;
 
     /**
      * 图片 id
      */
     private Long id;
+
+    /**
+     * 图片 url
+     */
+    private String fileUrl;
+
+    private static final long serialVersionUID = 1L;
 }

@@ -1,17 +1,30 @@
 package com.sonnet.picturebackend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.http.HttpResponse;
+import cn.hutool.http.HttpStatus;
+import cn.hutool.http.HttpUtil;
+import cn.hutool.http.Method;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.sonnet.picturebackend.common.ResultUtils;
+import com.qcloud.cos.COSClient;
+import com.qcloud.cos.model.PutObjectRequest;
+import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.sonnet.picturebackend.config.CosClientConfig;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
 import com.sonnet.picturebackend.exception.ThrowUtils;
+import com.sonnet.picturebackend.manager.CosManager;
 import com.sonnet.picturebackend.manager.FileManager;
 import com.sonnet.picturebackend.mapper.PictureMapper;
 import com.sonnet.picturebackend.model.dto.picture.*;
@@ -19,14 +32,22 @@ import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
 import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
+import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import com.sonnet.picturebackend.model.vo.UserVO;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.io.File;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -39,87 +60,14 @@ import java.util.stream.Collectors;
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     implements PictureService{
 
-    private final FileManager fileManager;
-    private final UserService userService;
-
-    public PictureServiceImpl(FileManager fileManager, UserService userService) {
-        this.fileManager = fileManager;
-        this.userService = userService;
-    }
-
-    /**
-     * 上传图片
-     * @param multipartFile
-     * @param pictureUploadRequest
-     * @param loginUser
-     * @return 脱敏图片信息
-     */
-    @Override
-    public PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
-        // 详细参数校验
-        if (multipartFile == null){
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "params is null");
-        }
-        if (loginUser == null){
-            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "user is not login");
-        }
-
-        // 仅管理员或者本人可以进行上传操作
-        Picture oldPicture = this.getById(pictureUploadRequest.getId());
-        if (!userService.isAdmin(loginUser) && !loginUser.getId().equals(oldPicture.getUserId())){
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to upload picture");
-        }
-
-        // 判断是新增图片还是更新图片
-        Long pictureId = null;
-        if (pictureUploadRequest.getId() != null){
-            pictureId = pictureUploadRequest.getId();
-        }
-        if (pictureId != null){
-            boolean exists = this.lambdaQuery()
-                    .eq(Picture::getId, pictureId)
-                    .exists();
-            if (!exists){
-                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "picture is not exists");
-            }
-        }
-
-        // 自动填充检验参数
-        fillReviewParams(oldPicture, loginUser);
-
-        // 上传图片，获取上传后的信息
-        // a. 构造存储路径并上云
-        String uploadPathPrefix = String.format("public/%s", loginUser.getId()); // 图片均存放在 public 目录下，且每个用户一个子目录目录
-        UploadPictureResult uploadPictureResult = fileManager.uploadPicture(multipartFile, uploadPathPrefix);
-        // b. 构造存入数据库的信息并存入
-        Picture picture = new Picture();
-        fillReviewParams(picture, loginUser); // 填写审核参数
-        picture.setUrl(uploadPictureResult.getUrl());
-        picture.setName(uploadPictureResult.getPicName());
-        picture.setPicSize(uploadPictureResult.getPicSize());
-        picture.setPicWidth(uploadPictureResult.getPicWidth());
-        picture.setPicHeight(uploadPictureResult.getPicHeight());
-        picture.setPicScale(uploadPictureResult.getPicScale());
-        picture.setPicFormat(uploadPictureResult.getPicFormat());
-        picture.setUserId(loginUser.getId());
-
-        // 如果为更新操作，更新编辑时间
-        if (pictureId != null){
-            // a. 仅本人和管理员可以编辑
-            if (!userService.isAdmin(loginUser) && !picture.getUserId().equals(loginUser.getId())){
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to edit picture");
-            }
-            picture.setId(pictureId);
-            picture.setEditTime(new Date());
-        }
-        boolean res = this.saveOrUpdate(picture);
-        if (!res){
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "save or update picture failed");
-        }
-
-        // 返回结果
-        return PictureVO.objToVo(picture);
-    }
+    @Resource
+    private FileManager fileManager;
+    @Resource
+    private UserService userService;
+    @Resource
+    private CosManager cosManager;
+    @Resource
+    private CosClientConfig cosClientConfig;
 
 
     /**
@@ -251,6 +199,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Long userId = pictureQueryRequest.getUserId();
         String sortField = pictureQueryRequest.getSortField();
         String sortOrder = pictureQueryRequest.getSortOrder();
+        Integer reviewStatus = pictureQueryRequest.getReviewStatus();
         // b. 构造 QueryWrapper
         // 从多字段中搜索(典型的动态构造查询条件)
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
@@ -271,6 +220,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         queryWrapper.eq(ObjUtil.isNotEmpty(picHeight) && id > 0, "picHeight", picHeight);
         queryWrapper.eq(ObjUtil.isNotEmpty(picSize) && id > 0, "picSize", picSize);
         queryWrapper.eq(ObjUtil.isNotEmpty(picScale) && id > 0, "picScale", picScale);
+        queryWrapper.eq(ObjUtil.isNotEmpty(reviewStatus) && id > 0, "reviewStatus", reviewStatus);
         // JSON 数组查询
         if (CollUtil.isNotEmpty(tags)) {
             for (String tag : tags) {
@@ -418,6 +368,230 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 返回结果
         return true;
     }
+
+    /**
+     * 上传图片
+     * @param multipartFile
+     * @param pictureUploadRequest
+     * @param loginUser
+     * @return 脱敏图片信息
+     */
+    @Override
+    public PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
+        // 详细参数校验
+        if (multipartFile == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "params is null");
+        }
+        if (loginUser == null){
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "user is not login");
+        }
+
+        // 仅管理员或者本人可以进行上传操作
+        Picture oldPicture = this.getById(pictureUploadRequest.getId());
+        if (!userService.isAdmin(loginUser) && !loginUser.getId().equals(oldPicture.getUserId())){
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to upload picture");
+        }
+
+        // 判断是新增图片还是更新图片
+        Long pictureId = null;
+        if (pictureUploadRequest.getId() != null){
+            pictureId = pictureUploadRequest.getId();
+        }
+        if (pictureId != null){
+            boolean exists = this.lambdaQuery()
+                    .eq(Picture::getId, pictureId)
+                    .exists();
+            if (!exists){
+                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "picture is not exists");
+            }
+        }
+
+        // 自动填充检验参数
+        fillReviewParams(oldPicture, loginUser);
+
+        // 上传图片，获取上传后的信息
+        // a. 构造存储路径并上云
+        String uploadPathPrefix = String.format("public/%s", loginUser.getId()); // 图片均存放在 public 目录下，且每个用户一个子目录目录
+        UploadPictureResult uploadPictureResult = fileManager.uploadPicture(multipartFile, uploadPathPrefix);
+        // b. 构造存入数据库的信息并存入
+        Picture picture = new Picture();
+        fillReviewParams(picture, loginUser); // 填写审核参数
+        picture.setUrl(uploadPictureResult.getUrl());
+        picture.setName(uploadPictureResult.getPicName());
+        picture.setPicSize(uploadPictureResult.getPicSize());
+        picture.setPicWidth(uploadPictureResult.getPicWidth());
+        picture.setPicHeight(uploadPictureResult.getPicHeight());
+        picture.setPicScale(uploadPictureResult.getPicScale());
+        picture.setPicFormat(uploadPictureResult.getPicFormat());
+        picture.setUserId(loginUser.getId());
+
+        // 如果为更新操作，更新编辑时间
+        if (pictureId != null){
+            // a. 仅本人和管理员可以编辑
+            if (!userService.isAdmin(loginUser) && !picture.getUserId().equals(loginUser.getId())){
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to edit picture");
+            }
+            picture.setId(pictureId);
+            picture.setEditTime(new Date());
+        }
+        boolean res = this.saveOrUpdate(picture);
+        if (!res){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "save or update picture failed");
+        }
+
+        // 返回结果
+        return PictureVO.objToVo(picture);
+    }
+
+    /**
+     * 通过 URL 上传图片
+     * @param pictureUploadRequest
+     * @param currentUser
+     * @return
+     */
+    @Override
+    public PictureVO uploadPictureByUrl(PictureUploadRequest pictureUploadRequest, User currentUser) {
+
+        // 校验，对接受到的参数进行严格校验
+        String fileUrl = pictureUploadRequest.getFileUrl();
+        validatePicture(fileUrl);
+
+        // 权限，仅管理员和本人可以上传图片
+
+        // 构架图片上传路径
+        String uuid = RandomUtil.randomString(16);
+        String originFileName = FileUtil.mainName(fileUrl);
+        String suffix = FileUtil.getSuffix(fileUrl);
+        String uploadFileName = String.format("%s_%s.%s", DateUtil.formatDate(new Date()), uuid, suffix);
+        String uploadPathPrefix = String.format("public/%s", currentUser.getId());
+        String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
+
+
+        // 创建临时存储文件
+        File file = null;
+        UploadPictureResult uploadPictureResult = new UploadPictureResult();
+        try {
+            // 通过 URL 下载文件，存储到临时文件中
+            file = File.createTempFile(uploadPath, null);
+            HttpUtil.downloadFile(fileUrl, file);
+
+            // 校验，对下载的图片进行详细的校验
+            // 上传通过校验的图片
+            PutObjectResult putObjectResult = cosManager.putPictureObject(uploadPath, file);
+            ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
+            uploadPictureResult = bulidResult(originFileName, file, uploadPath, imageInfo);
+            
+        } catch (IOException e) {
+            log.error("upload picture by url error", e);
+            throw new RuntimeException(e);
+        } finally {
+            if (file != null){
+                boolean delete = file.delete();
+                if (!delete){
+                    log.error("file delete error, filepath = " + file.getAbsolutePath());
+
+                }
+            }
+        }
+
+        // 归属，构造对应的图片入库信息，存储到数据库
+        Picture picture = new Picture();
+        fillReviewParams(picture, currentUser); // 填写审核参数
+        picture.setUrl(uploadPictureResult.getUrl());
+        picture.setName(uploadPictureResult.getPicName());
+        picture.setPicSize(uploadPictureResult.getPicSize());
+        picture.setPicWidth(uploadPictureResult.getPicWidth());
+        picture.setPicHeight(uploadPictureResult.getPicHeight());
+        picture.setPicScale(uploadPictureResult.getPicScale());
+        picture.setPicFormat(uploadPictureResult.getPicFormat());
+        picture.setUserId(currentUser.getId());
+        boolean res = this.saveOrUpdate(picture);
+        if (!res){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "save or update picture failed");
+        }
+
+        PictureVO pictureVO = PictureVO.objToVo(picture);
+
+        return pictureVO;
+    }
+
+    /**
+     * 构造上传结果
+     * @param originFileName
+     * @param file
+     * @param uploadPath
+     * @param imageInfo
+     * @return
+     */
+    private UploadPictureResult bulidResult(String originFileName, File file, String uploadPath, ImageInfo imageInfo) {
+
+        UploadPictureResult uploadPictureResult = new UploadPictureResult();
+        uploadPictureResult.setPicName(FileUtil.mainName(originFileName));
+        uploadPictureResult.setPicSize(FileUtil.size(file));
+        uploadPictureResult.setPicWidth(imageInfo.getWidth());
+        uploadPictureResult.setPicHeight(imageInfo.getHeight());
+        uploadPictureResult.setPicScale(NumberUtil.round(imageInfo.getWidth() * 1.0 / imageInfo.getHeight(), 2).doubleValue());
+        uploadPictureResult.setPicFormat(FileUtil.extName(originFileName));
+        uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + uploadPath);
+        uploadPictureResult.setPicFormat(imageInfo.getFormat());
+
+        return uploadPictureResult;
+    }
+
+    /**
+     * 通过校验图片
+     * @param fileUrl
+     */
+    private void validatePicture(String fileUrl) {
+
+        // 校验 URL 基本信息
+        if(StrUtil.isBlank(fileUrl)){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl can not be null");
+        }
+
+
+        // 校验 URL 协议
+        try {
+            new URL(fileUrl);
+        } catch (MalformedURLException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl is invalid");
+        }
+
+        // 发送 HEAD 请求验证文件是否存在
+        HttpResponse response = null;
+        try {
+            response = HttpUtil.createRequest(Method.HEAD, fileUrl).execute();
+            if (response.getStatus() != HttpStatus.HTTP_OK){
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl is invalid");
+            }
+
+            // 校验文件类型
+            String contentType = response.header("Content-Type");
+            if (StrUtil.isNotBlank(contentType)){
+                final List<String> ALLOW_CONTENT_TYPE = Arrays.asList("image/jpeg", "image/png", "image/gif", "image/jpg", "image/webp");
+                if (!ALLOW_CONTENT_TYPE.contains(contentType)){
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl is invalid");
+                }
+            }
+
+            // 检验文件大小
+            long contentLength = response.contentLength();
+            final long TWO_MB = 1024 * 1024 * 2;
+            if (contentLength > TWO_MB){
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小不能超过 2M");
+            }
+
+        } catch (Exception e) {
+            log.error("validate picture error", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "validate picture error");
+        } finally {
+            if (response != null){
+                response.close();
+            }
+        }
+
+    }
+
 
 }
 

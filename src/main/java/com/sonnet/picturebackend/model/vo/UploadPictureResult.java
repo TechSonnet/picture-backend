@@ -1,10 +1,10 @@
-package com.sonnet.picturebackend.model.dto.picture;
+package com.sonnet.picturebackend.model.vo;
 
 import lombok.Data;
 
 /**
  * 接收图片信息解析的类
- * 注意，这个类承接来自数据万象的解析结果，而非前端
+ * 注意，这个类承接来自数据万象的解析结果，而非前端，这也是为什么要有这个类
  * 再次加深了认识，dto 不仅接收来自前端的信息，而是来自外界的结果
  */
 @Data

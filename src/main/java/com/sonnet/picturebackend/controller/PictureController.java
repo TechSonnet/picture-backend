@@ -10,9 +10,11 @@ import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
 import com.sonnet.picturebackend.model.dto.picture.*;
 import com.sonnet.picturebackend.model.entry.PictureTagCategory;
+import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
 import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
+import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
 import org.springframework.web.bind.annotation.*;
@@ -101,24 +103,27 @@ public class PictureController {
     @PostMapping("/list/page")
     @AuthCheck(mustRole = Constant.ADMIN_ROLE)
     public BaseResponse<Page<Picture>> listPictureByPage(@RequestBody PictureQueryRequest pictureQueryRequest) {
-        // 1. 基本校验
+        // 基本校验
         if (pictureQueryRequest == null){
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
         }
 
-        // 2. 数据库查询图片
+        // 构造查询条件
         long current = pictureQueryRequest.getCurrent();
         long pageSize = pictureQueryRequest.getPageSize();
         if (current <= 0 || pageSize <= 0){
             current = 1L;
             pageSize = 10L;
         }
+
+        // 进查询查询审核通过的图片
+        pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
         Page<Picture> picturePage = pictureService.page(
                 new Page<>(current, pageSize),
                 pictureService.getQueryWrapper(pictureQueryRequest)
         ); // 仔细学习下这种分页查询的写法，不是很熟悉
 
-        // 3. 返回结果
+        // 返回结果
         return ResultUtils.success(picturePage);
     }
 
@@ -238,6 +243,12 @@ public class PictureController {
         return ResultUtils.success(pictureTagCategory);
     }
 
+    /**
+     * 图片审核
+     * @param pictureReviewRequest
+     * @param request
+     * @return
+     */
     @PostMapping("/review")
     @AuthCheck(mustRole = Constant.ADMIN_ROLE)
     public BaseResponse<Boolean> doPictureReview(@RequestBody PictureReviewRequest pictureReviewRequest,
@@ -255,6 +266,25 @@ public class PictureController {
 
         // 返回结果
         return ResultUtils.success(result);
+    }
+
+    /**
+     * 通过 URL 上传图片
+     */
+    @PostMapping("/upload/url")
+    public BaseResponse<PictureVO> uploadPictureByUrl(@RequestBody PictureUploadRequest pictureUploadRequest,
+                                                      HttpServletRequest request){
+        // 基本参数校验
+        if (pictureUploadRequest == null || request == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+
+        // 调用服务进行图片上传
+        User currentUser = userService.getLoginUser(request);
+        PictureVO pictureVO = pictureService.uploadPictureByUrl(pictureUploadRequest, currentUser);
+
+        // 返回上传结果
+        return ResultUtils.success(pictureVO);
     }
 
 }
