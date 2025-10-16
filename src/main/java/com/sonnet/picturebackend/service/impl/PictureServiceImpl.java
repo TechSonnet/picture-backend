@@ -428,7 +428,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 如果为更新操作，更新编辑时间
         if (pictureId != null){
             // a. 仅本人和管理员可以编辑
-            if (!userService.isAdmin(loginUser) && !picture.getUserId().equals(loginUser.getId())){
+            if (!userService.isAdmin(loginUser)
+                    && !picture.getUserId().equals(loginUser.getId())){
                 throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "no auth to edit picture");
             }
             picture.setId(pictureId);
@@ -456,43 +457,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         String fileUrl = pictureUploadRequest.getFileUrl();
         validatePicture(fileUrl);
 
-        // 权限，仅管理员和本人可以上传图片
-
-        // 构架图片上传路径
-        String uuid = RandomUtil.randomString(16);
-        String originFileName = FileUtil.mainName(fileUrl);
-        String suffix = FileUtil.getSuffix(fileUrl);
-        String uploadFileName = String.format("%s_%s.%s", DateUtil.formatDate(new Date()), uuid, suffix);
-        String uploadPathPrefix = String.format("public/%s", currentUser.getId());
-        String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
-
-
-        // 创建临时存储文件
-        File file = null;
-        UploadPictureResult uploadPictureResult = new UploadPictureResult();
-        try {
-            // 通过 URL 下载文件，存储到临时文件中
-            file = File.createTempFile(uploadPath, null);
-            HttpUtil.downloadFile(fileUrl, file);
-
-            // 校验，对下载的图片进行详细的校验
-            // 上传通过校验的图片
-            PutObjectResult putObjectResult = cosManager.putPictureObject(uploadPath, file);
-            ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
-            uploadPictureResult = bulidResult(originFileName, file, uploadPath, imageInfo);
-            
-        } catch (IOException e) {
-            log.error("upload picture by url error", e);
-            throw new RuntimeException(e);
-        } finally {
-            if (file != null){
-                boolean delete = file.delete();
-                if (!delete){
-                    log.error("file delete error, filepath = " + file.getAbsolutePath());
-
-                }
-            }
-        }
+        // 调用通用服务，实现图片上传
+        /// 一定要注意这里，这里调用了 fileManager 中的函数
+        ///  这是因为，这其实是一个较为底层且通用的能力，不必要在此处详细的展开，可以抽取出来
+        UploadPictureResult uploadPictureResult = fileManager.uploadPictureByUrl(fileUrl, currentUser);
 
         // 归属，构造对应的图片入库信息，存储到数据库
         Picture picture = new Picture();
@@ -515,28 +483,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureVO;
     }
 
-    /**
-     * 构造上传结果
-     * @param originFileName
-     * @param file
-     * @param uploadPath
-     * @param imageInfo
-     * @return
-     */
-    private UploadPictureResult bulidResult(String originFileName, File file, String uploadPath, ImageInfo imageInfo) {
 
-        UploadPictureResult uploadPictureResult = new UploadPictureResult();
-        uploadPictureResult.setPicName(FileUtil.mainName(originFileName));
-        uploadPictureResult.setPicSize(FileUtil.size(file));
-        uploadPictureResult.setPicWidth(imageInfo.getWidth());
-        uploadPictureResult.setPicHeight(imageInfo.getHeight());
-        uploadPictureResult.setPicScale(NumberUtil.round(imageInfo.getWidth() * 1.0 / imageInfo.getHeight(), 2).doubleValue());
-        uploadPictureResult.setPicFormat(FileUtil.extName(originFileName));
-        uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + uploadPath);
-        uploadPictureResult.setPicFormat(imageInfo.getFormat());
-
-        return uploadPictureResult;
-    }
 
     /**
      * 通过校验图片
@@ -566,13 +513,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             }
 
             // 校验文件类型
-            String contentType = response.header("Content-Type");
-            if (StrUtil.isNotBlank(contentType)){
-                final List<String> ALLOW_CONTENT_TYPE = Arrays.asList("image/jpeg", "image/png", "image/gif", "image/jpg", "image/webp");
-                if (!ALLOW_CONTENT_TYPE.contains(contentType)){
-                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl is invalid");
-                }
-            }
+//            String contentType = response.header("Content-Type");
+//            if (StrUtil.isNotBlank(contentType)){
+//                final List<String> ALLOW_CONTENT_TYPE = Arrays.asList("image/jpeg", "image/png", "image/gif", "image/jpg", "image/webp");
+//                if (!ALLOW_CONTENT_TYPE.contains(contentType)){
+//                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "fileUrl is invalid");
+//                }
+//            }
 
             // 检验文件大小
             long contentLength = response.contentLength();

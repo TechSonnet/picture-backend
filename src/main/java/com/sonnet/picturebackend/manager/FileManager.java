@@ -1,8 +1,10 @@
 package com.sonnet.picturebackend.manager;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.http.HttpUtil;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
@@ -11,6 +13,7 @@ import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
 import com.sonnet.picturebackend.config.CosClientConfig;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
+import com.sonnet.picturebackend.model.entry.User;
 import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Date;
 
 /**
  * FileManager <- CosManager，注意这个调用链
@@ -92,6 +96,7 @@ public class FileManager {
 
     }
 
+
     /**
      * 校验图片
      * @param multipartFile
@@ -147,6 +152,75 @@ public class FileManager {
     }
 
 
+    /**
+     * 通过 url 上传图片
+     * @param fileUrl
+     * @param currentUser
+     * @return
+     */
+    public UploadPictureResult uploadPictureByUrl(String fileUrl, User currentUser) {
+
+        // 构架图片上传路径
+        String uuid = RandomUtil.randomString(16);
+        String originFileName = FileUtil.mainName(fileUrl);
+        String suffix = FileUtil.getSuffix(fileUrl);
+        String uploadFileName = String.format("%s_%s.%s", DateUtil.formatDate(new Date()), uuid, suffix);
+        String uploadPathPrefix = String.format("public/%s", currentUser.getId());
+        String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
+
+
+        // 创建临时存储文件
+        File file = null;
+        UploadPictureResult uploadPictureResult = new UploadPictureResult();
+        try {
+            // 通过 URL 下载文件，存储到临时文件中
+            file = File.createTempFile(uploadPath, null);
+            HttpUtil.downloadFile(fileUrl, file);
+
+            // 校验，对下载的图片进行详细的校验
+            // 上传通过校验的图片
+            PutObjectResult putObjectResult = cosManager.putPictureObject(uploadPath, file);
+            ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
+            uploadPictureResult = bulidResult(originFileName, file, uploadPath, imageInfo);
+
+        } catch (IOException e) {
+            log.error("upload picture by url error", e);
+            throw new RuntimeException(e);
+        } finally {
+            if (file != null){
+                boolean delete = file.delete();
+                if (!delete){
+                    log.error("file delete error, filepath = " + file.getAbsolutePath());
+
+                }
+            }
+        }
+
+        return uploadPictureResult;
+    }
+
+    /**
+     * 构造上传结果
+     * @param originFileName
+     * @param file
+     * @param uploadPath
+     * @param imageInfo
+     * @return
+     */
+    private UploadPictureResult bulidResult(String originFileName, File file, String uploadPath, ImageInfo imageInfo) {
+
+        UploadPictureResult uploadPictureResult = new UploadPictureResult();
+        uploadPictureResult.setPicName(FileUtil.mainName(originFileName));
+        uploadPictureResult.setPicSize(FileUtil.size(file));
+        uploadPictureResult.setPicWidth(imageInfo.getWidth());
+        uploadPictureResult.setPicHeight(imageInfo.getHeight());
+        uploadPictureResult.setPicScale(NumberUtil.round(imageInfo.getWidth() * 1.0 / imageInfo.getHeight(), 2).doubleValue());
+        uploadPictureResult.setPicFormat(FileUtil.extName(originFileName));
+        uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + uploadPath);
+        uploadPictureResult.setPicFormat(imageInfo.getFormat());
+
+        return uploadPictureResult;
+    }
 }
 
 
