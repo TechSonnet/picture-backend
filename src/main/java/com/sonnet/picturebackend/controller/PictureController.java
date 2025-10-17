@@ -36,16 +36,6 @@ public class PictureController {
     @Resource
     private PictureService pictureService;
 
-
-    @PostMapping("/upload")
-    public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile,
-                                                 PictureUploadRequest pictureUploadRequest,
-                                                 HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        PictureVO pictureVO = pictureService.uploadPicture(multipartFile, pictureUploadRequest, loginUser);
-        return ResultUtils.success(pictureVO);
-    }
-
     /**
      * 同过 ID 获取图片完整信息
      * @param id
@@ -269,6 +259,22 @@ public class PictureController {
     }
 
     /**
+     * 上传图片文件
+     * @param multipartFile
+     * @param pictureUploadRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/upload")
+    public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile,
+                                                 PictureUploadRequest pictureUploadRequest,
+                                                 HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        PictureVO pictureVO = pictureService.uploadPicture(multipartFile, pictureUploadRequest, loginUser);
+        return ResultUtils.success(pictureVO);
+    }
+
+    /**
      * 通过 URL 上传图片
      */
     @PostMapping("/upload/url")
@@ -281,7 +287,7 @@ public class PictureController {
 
         // 调用服务进行图片上传
         User currentUser = userService.getLoginUser(request);
-        PictureVO pictureVO = pictureService.uploadPictureByUrl(pictureUploadRequest, currentUser);
+        PictureVO pictureVO = pictureService.uploadPicture(pictureUploadRequest.getFileUrl(), pictureUploadRequest, currentUser);
 
         // 返回上传结果
         return ResultUtils.success(pictureVO);

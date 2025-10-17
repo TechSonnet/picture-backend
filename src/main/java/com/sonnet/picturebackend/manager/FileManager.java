@@ -30,6 +30,7 @@ import java.util.Date;
  */
 @Service
 @Slf4j
+@Deprecated
 public class FileManager {
 
     @Resource

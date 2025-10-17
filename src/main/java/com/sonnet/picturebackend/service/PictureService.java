@@ -19,8 +19,6 @@ import javax.servlet.http.HttpServletRequest;
 */
 public interface PictureService extends IService<Picture> {
 
-    PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser);
-
     Wrapper<Picture> getQueryWrapper(PictureQueryRequest pictureQueryRequest);
 
 
@@ -39,5 +37,5 @@ public interface PictureService extends IService<Picture> {
     boolean doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
 
 
-    PictureVO uploadPictureByUrl(PictureUploadRequest pictureUploadRequest, User currentUser);
+    PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, User loginUser);
 }
