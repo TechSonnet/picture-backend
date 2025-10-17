@@ -14,7 +14,6 @@ import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
 import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
-import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
 import org.springframework.web.bind.annotation.*;
@@ -140,7 +139,30 @@ public class PictureController {
         );
 
         // 3. 返回结果
-        return ResultUtils.success(pictureService.getPictureVOList(picturePage));
+        return ResultUtils.success(pictureService.getPictureVOPage(picturePage));
+    }
+
+    /**
+     * Cache 优化
+     * @param pictureQueryRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/get/page/vo/cache")
+    public BaseResponse<Page<PictureVO>> listPictureVOByPageWithCache(@RequestBody PictureQueryRequest pictureQueryRequest,
+                                                                     HttpServletRequest request){
+
+        // 基本参数校验
+        if (pictureQueryRequest == null || request == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "param is null");
+        }
+
+        // 调用服务查询结果
+        User loginUser = userService.getLoginUser(request);
+        Page<PictureVO> pictureVOList = pictureService.getPictureVOListWithCache(pictureQueryRequest, loginUser);
+
+        // 返回结果
+        return ResultUtils.success(pictureVOList);
     }
 
 

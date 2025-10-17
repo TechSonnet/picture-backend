@@ -7,8 +7,6 @@ import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.sonnet.picturebackend.model.vo.UploadPictureResult;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -22,7 +20,7 @@ public interface PictureService extends IService<Picture> {
     Wrapper<Picture> getQueryWrapper(PictureQueryRequest pictureQueryRequest);
 
 
-    Page<PictureVO> getPictureVOList(Page<Picture> picturePage);
+    Page<PictureVO> getPictureVOPage(Page<Picture> picturePage);
 
     boolean doReviewPicture(PictureReviewRequest pictureReviewRequest, User loginUser);
 
@@ -38,4 +36,7 @@ public interface PictureService extends IService<Picture> {
 
 
     PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, User loginUser);
+
+
+    Page<PictureVO> getPictureVOListWithCache(PictureQueryRequest pictureQueryRequest, User loginUser);
 }

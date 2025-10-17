@@ -1,25 +1,16 @@
 package com.sonnet.picturebackend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.http.HttpResponse;
-import cn.hutool.http.HttpStatus;
-import cn.hutool.http.HttpUtil;
-import cn.hutool.http.Method;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.qcloud.cos.COSClient;
-import com.qcloud.cos.model.PutObjectRequest;
-import com.qcloud.cos.model.PutObjectResult;
-import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.qcloud.cos.utils.Md5Utils;
+import com.sonnet.picturebackend.common.ResultUtils;
 import com.sonnet.picturebackend.config.CosClientConfig;
 import com.sonnet.picturebackend.exception.BusinessException;
 import com.sonnet.picturebackend.exception.ErrorCode;
@@ -31,26 +22,21 @@ import com.sonnet.picturebackend.manager.upload.PictureUploadTemplate;
 import com.sonnet.picturebackend.manager.upload.UrlPictureUpload;
 import com.sonnet.picturebackend.mapper.PictureMapper;
 import com.sonnet.picturebackend.model.dto.picture.*;
-import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
-import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.entry.Picture;
 import com.sonnet.picturebackend.model.entry.User;
+import com.sonnet.picturebackend.model.enums.PictureReviewStatusEnum;
+import com.sonnet.picturebackend.model.vo.PictureVO;
 import com.sonnet.picturebackend.model.vo.UploadPictureResult;
 import com.sonnet.picturebackend.model.vo.UserVO;
 import com.sonnet.picturebackend.service.PictureService;
 import com.sonnet.picturebackend.service.UserService;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.io.File;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -75,6 +61,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private FilePictureUpload filePictureUpload;
     @Resource
     private UrlPictureUpload urlPictureUpload;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
 
     /**
@@ -247,7 +235,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public Page<PictureVO> getPictureVOList(Page<Picture> picturePage) {
+    public Page<PictureVO> getPictureVOPage(Page<Picture> picturePage) {
         // 1. 基本校验
         if (CollUtil.isEmpty(picturePage.getRecords())){
             return null;
@@ -440,6 +428,41 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 返回结果
         return PictureVO.objToVo(picture);
     }
+
+    @Override
+    public Page<PictureVO> getPictureVOListWithCache(PictureQueryRequest pictureQueryRequest, User loginUser) {
+
+        // 详细参数校验
+        long current = pictureQueryRequest.getCurrent();
+        long pageSize = pictureQueryRequest.getPageSize();
+
+        // 构造查询条件
+        Wrapper<Picture> queryWrapper = getQueryWrapper(pictureQueryRequest);
+
+        // 构造缓存 key
+        String partKey = Md5Utils.md5Hex(JSONUtil.toJsonStr(pictureQueryRequest));
+        String key = StrUtil.format("picture:listPictureVO:{}", partKey);
+
+        // 缓存查询
+        ValueOperations<String, String> valueOps = stringRedisTemplate.opsForValue();
+        String cachedValue = valueOps.get(key);
+        if (cachedValue != null) {
+            return JSONUtil.toBean(cachedValue, Page.class);
+        }
+
+        // 数据库查询
+        Page<Picture> page = this.page(new Page<>(current, pageSize), queryWrapper);
+        Page<PictureVO> pictureVOPage = this.getPictureVOPage(page);
+
+        // 放入缓存
+        String cacheValue = JSONUtil.toJsonStr(pictureVOPage);
+        int cacheExpireTime = 300 + RandomUtil.randomInt(0,300); // 防止缓存雪崩
+        valueOps.set(key, cacheValue, cacheExpireTime);
+
+
+        return pictureVOPage;
+    }
+
 
     private Picture getPicture(User currentUser, UploadPictureResult uploadPictureResult) {
         Picture picture = new Picture();
